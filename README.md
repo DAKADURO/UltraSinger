@@ -288,8 +288,20 @@ uv pip install --index-url https://download.pytorch.org/whl/cu121 torch torchvis
 
 #### Crashes due to low VRAM
 
-If something crashes because of low VRAM then use a smaller Whisper model.
-Whisper needs more than 8GB VRAM in the `large` model!
+UltraSinger chooses the Whisper batch size and compute type from the VRAM of your GPU, unless you set
+`--whisper_batch_size` or `--whisper_compute_type` yourself:
+
+| VRAM       | Batch size | Compute type |
+|------------|------------|--------------|
+| 16 GB +    | 16         | float16      |
+| 10 - 16 GB | 8          | float16      |
+| 7 - 10 GB  | 8          | int8         |
+| below 7 GB | 4          | int8         |
+
+If Whisper still runs out of memory, it is retried automatically with a smaller batch size and finally `int8`.
+
+If it keeps crashing because of low VRAM then use a smaller Whisper model (e.g. `--whisper medium`).
+Whisper needs more than 8GB VRAM in the `large` model with `float16`!
 
 You can also force CPU usage with the extra option `--force_cpu`.
 

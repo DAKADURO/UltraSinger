@@ -43,8 +43,8 @@ class Settings:
     whisper_model = WhisperModel.LARGE_V2  # Multilingual model tiny|base|small|medium|large-v1|large-v2|large-v3
     # English-only model tiny.en|base.en|small.en|medium.en
     whisper_align_model = None   # Model for other languages from huggingface.co e.g -> "gigant/romanian-wav2vec2"
-    whisper_batch_size = 16   # reduce if low on GPU mem
-    whisper_compute_type = None   # change to "int8" if low on GPU mem (may reduce accuracy)
+    whisper_batch_size = None   # None = chosen from the GPU memory; reduce if low on GPU mem
+    whisper_compute_type = None   # None = chosen from the GPU memory; "int8" if low on GPU mem (may reduce accuracy)
     keep_numbers = False
 
     # Device

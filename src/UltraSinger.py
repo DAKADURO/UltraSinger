@@ -68,7 +68,7 @@ from modules.plot import create_plots
 from modules.musicbrainz_client import search_musicbrainz
 from modules.sheet import create_sheet
 from modules.ProcessData import ProcessData, ProcessDataPaths, MediaInfo
-from modules.DeviceDetection.device_detection import check_gpu_support
+from modules.DeviceDetection.device_detection import check_gpu_support, get_gpu_vram_gb, recommend_whisper_settings
 from modules.Image.image_helper import save_image
 from modules.ffmpeg_helper import (
     is_ffmpeg_available,
@@ -750,9 +750,23 @@ def main(argv: list[str]) -> None:
     sys.exit()
 
 
+def apply_recommended_whisper_settings() -> None:
+    """Choose whisper batch size and compute type from the GPU memory, unless the user set them"""
+    on_gpu = settings.pytorch_device == "cuda" and not settings.force_cpu and not settings.force_whisper_cpu
+    batch_size, compute_type = recommend_whisper_settings(get_gpu_vram_gb() if on_gpu else None)
+
+    if settings.whisper_batch_size is None:
+        settings.whisper_batch_size = batch_size
+        print(f"{ULTRASINGER_HEAD} Whisper batch size: {blue_highlighted(str(batch_size))} (chosen from GPU memory)")
+    if settings.whisper_compute_type is None and compute_type is not None:
+        settings.whisper_compute_type = compute_type
+        print(f"{ULTRASINGER_HEAD} Whisper compute type: {blue_highlighted(compute_type)} (chosen from GPU memory)")
+
+
 def check_requirements() -> None:
     if not settings.force_cpu:
         settings.pytorch_device = check_gpu_support()
+    apply_recommended_whisper_settings()
     print(f"{ULTRASINGER_HEAD} ----------------------")
 
     if not is_ffmpeg_available(settings.user_ffmpeg_path):

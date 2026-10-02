@@ -38,8 +38,8 @@ def print_help() -> None:
                             English-only model > tiny.en|base.en|small.en|medium.en
     --whisper_align_model   Use other languages model for Whisper provided from huggingface.co
     --language              Override the language detected by whisper, does not affect transcription but steps after transcription
-    --whisper_batch_size    Reduce if low on GPU mem >> ((default) is 16)
-    --whisper_compute_type  Change to "int8" if low on GPU mem (may reduce accuracy) >> ((default) is "float16" for cuda devices, "int8" for cpu)
+    --whisper_batch_size    Reduce if low on GPU mem >> ((default) is chosen from the GPU memory, 16 on cpu)
+    --whisper_compute_type  Change to "int8" if low on GPU mem (may reduce accuracy) >> ((default) is chosen from the GPU memory: "float16" or "int8" for cuda devices, "int8" for cpu)
     --keep_numbers          Numbers will be transcribed as numerics instead of as words >> True|False >> ((default) is False)
     
     [pitcher]
