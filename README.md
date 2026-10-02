@@ -296,3 +296,14 @@ You can also force CPU usage with the extra option `--force_cpu`.
 ### 📦 Containerized (Docker or Podman)
 
 See [container/README.md](container/README.md)
+
+## Batch processing
+
+Process every audio file of a folder, skip songs that were already done and optionally copy the results to your game's song folder:
+
+```commandline
+python UltraSingerBatch.py "path/to/songs" -o "path/to/output" --copy_to "path/to/game/songs" --language es
+```
+
+All options that `UltraSingerBatch.py` does not know (like `--language`) are passed on to `UltraSinger.py`.
+Use `--recursive` to include sub folders and `--force` to process finished songs again. Logs are written to `<output>/batch_logs`.
