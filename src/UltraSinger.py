@@ -63,6 +63,7 @@ from modules.Ultrastar.coverter.ultrastar_txt_converter import from_ultrastar_tx
 from modules.Ultrastar.ultrastar_parser import parse_ultrastar_txt
 from modules.common_print import print_support, print_help, print_version
 from modules.os_helper import check_file_exists, get_unused_song_output_dir
+from modules.audio_tags import read_audio_tags
 from modules.plot import create_plots
 from modules.musicbrainz_client import search_musicbrainz
 from modules.sheet import create_sheet
@@ -649,13 +650,20 @@ def infos_from_audio_video_input_file() -> tuple[str, str, str, MediaInfo]:
     basename = os.path.basename(settings.input_file_path)
     basename_without_ext = os.path.splitext(basename)[0]
 
+    tags = read_audio_tags(settings.input_file_path)
+
     artist, title = None, None
     if " - " in basename_without_ext:
         artist, title = basename_without_ext.split(" - ", 1)
+    elif tags.artist and tags.title:
+        artist, title = tags.artist, tags.title
     else:
         title = basename_without_ext
 
     song_info = search_musicbrainz(title, artist)
+    if tags.year:
+        # The year stored in the file describes this release; MusicBrainz may return another edition
+        song_info.year = tags.year
     basename_without_ext = f"{song_info.artist} - {song_info.title}"
 
     song_folder_output_path = os.path.join(settings.output_folder_path, basename_without_ext)
