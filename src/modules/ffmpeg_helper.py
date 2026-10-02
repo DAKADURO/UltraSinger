@@ -79,14 +79,17 @@ def is_video_file(file_path: str) -> bool:
         cmd = [
             ffprobe_path,
             "-v", "error",
-            "-select_streams", "v:0",
-            "-show_entries", "stream=codec_type",
-            "-of", "default=noprint_wrappers=1:nokey=1",
+            "-select_streams", "v",
+            "-show_entries", "stream_disposition=attached_pic",
+            "-of", "csv=p=0",
             file_path
         ]
 
         result = subprocess.run(cmd, capture_output=True, text=True)
-        return result.returncode == 0 and result.stdout.strip() == "video"
+        if result.returncode != 0:
+            return False
+        # Embedded cover art (attached_pic=1) is not a real video stream
+        return any(line.strip() == "0" for line in result.stdout.splitlines())
     except Exception:
         return False
 

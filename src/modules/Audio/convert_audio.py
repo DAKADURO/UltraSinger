@@ -37,5 +37,9 @@ def convert_audio_format(input_file_path: str, output_file_path: str) -> None:
     ]
 
     result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0 and output_format == "mp3":
+        # LAME can hit a VBR assertion on some audio; retry with constant bitrate
+        cmd[cmd.index("-q:a"):cmd.index("-q:a") + 2] = ["-b:a", "320k"]
+        result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         raise RuntimeError(f"FFmpeg audio conversion failed: {result.stderr}")
