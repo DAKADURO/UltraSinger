@@ -17,6 +17,8 @@ dependencies = [
     "language_data",
     "packaging",
     "librosa",
+    "numpy<2.5",  # numba (used by librosa) does not support NumPy 2.5 yet
+    "mutagen",
     "swift-f0",
     "pydub",
     "demucs",
