@@ -1,4 +1,5 @@
 """Whisper Speech Recognition Module"""
+import gc
 import os
 import inspect
 import textwrap
@@ -88,6 +89,16 @@ def replace_code_lines(source, start_token, end_token,
     return re.sub(r"^(\s+)({}[\s\S]+?)(?=^\1{})".format(start_token, end_token),
                   replace_with_indent, source, flags=re.MULTILINE)
 
+def __is_out_of_memory(error: Exception) -> bool:
+    return isinstance(error, OutOfMemoryError) or "out of memory" in str(error).lower()
+
+
+def __free_gpu_memory() -> None:
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+
 def transcribe_with_whisper(
     audio_path: str,
     model: WhisperModel,
@@ -112,18 +123,40 @@ def transcribe_with_whisper(
         compute_type = "float16" if device == "cuda" else "int8"
 
     try:
-        torch.cuda.empty_cache()
-        loaded_whisper_model = whisperx.load_model(
-            model.value, language=language, device=device, compute_type=compute_type
-        )
+        while True:
+            try:
+                __free_gpu_memory()
+                loaded_whisper_model = whisperx.load_model(
+                    model.value, language=language, device=device, compute_type=compute_type
+                )
 
-        audio = whisperx.load_audio(audio_path)
+                audio = whisperx.load_audio(audio_path)
 
-        print(f"{ULTRASINGER_HEAD} Transcribing {audio_path}")
+                print(f"{ULTRASINGER_HEAD} Transcribing {audio_path}")
 
-        result = loaded_whisper_model.transcribe(
-            audio, batch_size=batch_size, language=language
-        )
+                result = loaded_whisper_model.transcribe(
+                    audio, batch_size=batch_size, language=language
+                )
+                break
+            except RuntimeError as runtime_error:
+                if device != "cuda" or not __is_out_of_memory(runtime_error):
+                    raise
+                loaded_whisper_model = None
+                if batch_size > 4:
+                    batch_size //= 2
+                elif compute_type == "float16":
+                    compute_type = "int8"
+                elif batch_size > 1:
+                    batch_size //= 2
+                else:
+                    raise
+                print(
+                    f"{ULTRASINGER_HEAD} Out of GPU memory, retrying with batch size {batch_size} and compute type {compute_type}"
+                )
+
+        # The transcription model is not needed anymore; free its memory before alignment
+        loaded_whisper_model = None
+        __free_gpu_memory()
 
         detected_language = result["language"]
         if language is None:
