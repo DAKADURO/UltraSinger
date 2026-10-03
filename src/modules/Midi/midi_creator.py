@@ -18,6 +18,15 @@ from modules.Ultrastar.ultrastar_txt import UltrastarTxtValue
 from modules.Pitcher.pitched_data import PitchedData
 from modules.Pitcher.pitched_data_helper import get_frequencies_with_high_confidence
 from modules.Audio.key_detector import quantize_note_to_key
+from modules.Midi.pitch_correction import (
+    MIN_KEY_CORRELATION,
+    allowed_pitch_classes,
+    detect_key_from_pitches,
+    fill_missing,
+    fix_octaves,
+    soft_quantize,
+    steady_pitch,
+)
 
 def create_midi_instrument(midi_segments: list[MidiSegment]) -> object:
     """Converts an Ultrastar data to a midi instrument"""
@@ -85,9 +94,22 @@ def find_nearest_index(array: list[float], value: float) -> int:
     return idx
 
 
+def __frames_between(start_time: float, end_time: float, pitched_data: PitchedData) -> tuple[list[float], list[float]]:
+    start = find_nearest_index(pitched_data.times, start_time)
+    end = find_nearest_index(pitched_data.times, end_time)
+
+    if start == end:
+        return [pitched_data.frequencies[start]], [pitched_data.confidence[start]]
+    return pitched_data.frequencies[start:end], pitched_data.confidence[start:end]
+
+
 def create_midi_notes_from_pitched_data(start_times: list[float], end_times: list[float], words: list[str],
-                                         pitched_data: PitchedData, allowed_notes: set[str] = None) -> list[MidiSegment]:
+                                         pitched_data: PitchedData, allowed_notes: set[str] = None,
+                                         quantize_to_key: bool = False) -> list[MidiSegment]:
     """Create midi notes from pitched data
+
+    The pitch of every syllable is its steadiest pitch inside the singing range. Octave errors are
+    corrected with the neighbouring notes.
 
     Args:
         start_times: List of start times
@@ -95,24 +117,46 @@ def create_midi_notes_from_pitched_data(start_times: list[float], end_times: lis
         words: List of words/syllables
         pitched_data: Pitched data containing frequencies and confidence
         allowed_notes: Optional set of allowed note names for key quantization
+        quantize_to_key: Detect the key from the sung notes and move uncertain notes into it
 
     Returns:
         List of MidiSegments
     """
     print(f"{ULTRASINGER_HEAD} Creating midi_segments")
 
+    pitches = []
+    for start_time, end_time in zip(start_times, end_times):
+        freqs, confs = __frames_between(start_time, end_time, pitched_data)
+        pitches.append(steady_pitch(freqs, confs))
+    pitches = fix_octaves(fill_missing(pitches))
+
+    semitones = [int(round(pitch)) for pitch in pitches]
+    if quantize_to_key:
+        durations = [end - start for start, end in zip(start_times, end_times)]
+        key = detect_key_from_pitches(pitches, durations)
+        if key is not None and key[2] >= MIN_KEY_CORRELATION:
+            print(f"{ULTRASINGER_HEAD} Key of the sung notes: {blue_highlighted(f'{key[0]} {key[1]}')}")
+            allowed = allowed_pitch_classes(key[0], key[1])
+            semitones = [soft_quantize(pitch, allowed) for pitch in pitches]
+        else:
+            print(f"{ULTRASINGER_HEAD} No clear key in the sung notes - notes are not moved into a key")
+
     midi_segments = []
-
     for index, start_time in enumerate(start_times):
-        end_time = end_times[index]
-        word = str(words[index])
-
-        midi_segment = create_midi_note_from_pitched_data(start_time, end_time, pitched_data, word, allowed_notes)
-        midi_segments.append(midi_segment)
-
-        # todo: Progress?
-        # print(filename + " f: " + str(mean))
+        note = librosa.midi_to_note(semitones[index], unicode=False)
+        if allowed_notes is not None:
+            note = quantize_note_to_key(note, allowed_notes)
+        midi_segments.append(MidiSegment(note, start_time, end_times[index], str(words[index])))
     return midi_segments
+
+
+def detect_key_from_midi_segments(midi_segments: list[MidiSegment]) -> str | None:
+    """Key of the sung notes (e.g. 'A minor'), None if it is not clear"""
+    pitches = [librosa.note_to_midi(segment.note) for segment in midi_segments]
+    key = detect_key_from_pitches(pitches, [segment.end - segment.start for segment in midi_segments])
+    if key is None or key[2] < MIN_KEY_CORRELATION:
+        return None
+    return f"{key[0]} {key[1]}"
 
 
 def create_midi_note_from_pitched_data(start_time: float, end_time: float, pitched_data: PitchedData, word: str,
@@ -130,21 +174,15 @@ def create_midi_note_from_pitched_data(start_time: float, end_time: float, pitch
         One MidiSegment
     """
 
-    start = find_nearest_index(pitched_data.times, start_time)
-    end = find_nearest_index(pitched_data.times, end_time)
+    freqs, confs = __frames_between(start_time, end_time, pitched_data)
+    pitch = steady_pitch(freqs, confs)
 
-    if start == end:
-        freqs = [pitched_data.frequencies[start]]
-        confs = [pitched_data.confidence[start]]
+    if pitch is not None:
+        note = librosa.midi_to_note(int(round(pitch)), unicode=False)
     else:
-        freqs = pitched_data.frequencies[start:end]
-        confs = pitched_data.confidence[start:end]
-
-    conf_f = get_frequencies_with_high_confidence(freqs, confs)
-
-    notes = convert_frequencies_to_notes(conf_f)
-
-    note = most_frequent(notes)[0][0]
+        # No frame inside the singing range: use whatever was detected
+        conf_f = get_frequencies_with_high_confidence(freqs, confs)
+        note = most_frequent(convert_frequencies_to_notes(conf_f))[0][0]
 
     if allowed_notes is not None:
         note = quantize_note_to_key(note, allowed_notes)
@@ -153,13 +191,15 @@ def create_midi_note_from_pitched_data(start_time: float, end_time: float, pitch
 
 
 def create_midi_segments_from_transcribed_data(transcribed_data: list[TranscribedData], pitched_data: PitchedData,
-                                                allowed_notes: set[str] = None) -> list[MidiSegment]:
+                                                allowed_notes: set[str] = None,
+                                                quantize_to_key: bool = False) -> list[MidiSegment]:
     """Create MIDI segments from transcribed data
 
     Args:
         transcribed_data: List of transcribed data segments
         pitched_data: Pitched data containing frequencies and confidence
         allowed_notes: Optional set of allowed note names for key quantization
+        quantize_to_key: Detect the key from the sung notes and move uncertain notes into it
 
     Returns:
         List of MidiSegments
@@ -174,7 +214,7 @@ def create_midi_segments_from_transcribed_data(transcribed_data: list[Transcribe
             end_times.append(midi_segment.end)
             words.append(midi_segment.word)
         midi_segments = create_midi_notes_from_pitched_data(start_times, end_times, words,
-                                                            pitched_data, allowed_notes)
+                                                            pitched_data, allowed_notes, quantize_to_key)
         return midi_segments
 
 

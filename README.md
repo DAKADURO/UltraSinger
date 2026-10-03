@@ -345,6 +345,16 @@ Or use your own file:
 Lyrics are protected by copyright. They are only used for the song folder on your computer.
 Check the result, the lyrics from the community can contain errors too.
 
+## How the notes are found
+
+The pitch of every syllable is its steadiest pitch inside the range of a singing voice (70 - 1100 Hz).
+Pitch detectors sometimes jump an octave or detect high noise on consonants, so notes that are far away
+from the notes around them are moved by whole octaves towards them.
+
+The key is detected from the sung notes of the whole song. Only notes between two semitones are moved into the key,
+a note that clearly sits on a semitone outside of the key is kept. If the sung notes do not fit a key clearly, no note is moved.
+Use `--quantize_to_key` to switch this off.
+
 ## Add a video to a song
 
 For a single audio file use `--video`. The video is copied to the song folder and linked with `#VIDEO`:

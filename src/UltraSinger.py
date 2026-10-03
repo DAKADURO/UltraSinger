@@ -41,6 +41,7 @@ from modules.console_colors import (
 )
 from modules.Midi.midi_creator import (
     create_midi_segments_from_transcribed_data,
+    detect_key_from_midi_segments,
     create_repitched_midi_segments_from_ultrastar_txt,
     create_midi_file,
 )
@@ -203,18 +204,17 @@ def run() -> tuple[str, Score, Score]:
     # Pitch audio
     process_data.pitched_data = pitch_audio(process_data.process_data_paths)
 
-    # Allowed keys for quantization
-    allowed_notes_for_key = None
-    if settings.quantize_to_key and not settings.ignore_audio:
-        allowed_notes_for_key = get_allowed_notes_for_key(detected_key, detected_mode)
-
     # Create Midi_Segments
     if not settings.ignore_audio:
+        # The key is detected from the sung notes, not from the audio, which was often wrong
         process_data.midi_segments = create_midi_segments_from_transcribed_data(
             process_data.transcribed_data,
             process_data.pitched_data,
-            allowed_notes_for_key
+            quantize_to_key=bool(settings.quantize_to_key)
         )
+        sung_key = detect_key_from_midi_segments(process_data.midi_segments)
+        if sung_key is not None:
+            process_data.media_info.music_key = sung_key
     else:
         process_data.midi_segments = create_repitched_midi_segments_from_ultrastar_txt(process_data.pitched_data,
                                                                                        process_data.parsed_file)
