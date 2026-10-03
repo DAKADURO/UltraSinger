@@ -323,6 +323,28 @@ When a song is processed again, its previous song folder is replaced (also in th
 
 If a video with the same name is next to the audio file (e.g. `song.mp3` and `song.mp4`) it is added to the song and linked with `#VIDEO`.
 
+## Better lyrics
+
+By default the lyrics are the text that Whisper recognizes, which can contain wrong words. You can give UltraSinger the lyrics instead.
+The lyrics must be synced (`.lrc`), because the audio is only used to align them word by word.
+
+Search the lyrics automatically on [LRCLIB](https://lrclib.net). Only artist and title are sent to lrclib.net:
+
+```commandline
+-i "input/music.mp3" --online_lyrics
+```
+
+The version whose duration is closest to your audio is used. If none fits (for example only a live version exists), the transcription is used.
+
+Or use your own file:
+
+```commandline
+-i "input/music.mp3" --lyrics "input/music.lrc"
+```
+
+Lyrics are protected by copyright. They are only used for the song folder on your computer.
+Check the result, the lyrics from the community can contain errors too.
+
 ## Add a video to a song
 
 For a single audio file use `--video`. The video is copied to the song folder and linked with `#VIDEO`:

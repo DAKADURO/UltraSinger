@@ -2,10 +2,14 @@
 
 import copy
 import getopt
+import hashlib
 import os
 import sys
+from typing import Optional
+
 import Levenshtein
 import librosa
+import soundfile
 
 from packaging import version
 
@@ -64,6 +68,7 @@ from modules.Ultrastar.ultrastar_parser import parse_ultrastar_txt
 from modules.common_print import print_support, print_help, print_version
 from modules.os_helper import check_file_exists, get_unused_song_output_dir
 from modules.audio_tags import read_audio_tags
+from modules.lyrics_client import LyricLine, fetch_synced_lyrics, read_lrc_file
 from modules.plot import create_plots
 from modules.musicbrainz_client import search_musicbrainz
 from modules.sheet import create_sheet
@@ -499,7 +504,8 @@ def InitProcessData():
 
 def TranscribeAudio(process_data):
     transcription_result = transcribe_audio(process_data.process_data_paths.cache_folder_path,
-                                            process_data.process_data_paths.processing_audio_path)
+                                            process_data.process_data_paths.processing_audio_path,
+                                            process_data.media_info)
 
     if process_data.media_info.language is None:
         process_data.media_info.language = transcription_result.detected_language
@@ -611,7 +617,19 @@ def CreateProcessAudio(process_data) -> str:
     return mute_output_path
 
 
-def transcribe_audio(cache_folder_path: str, processing_audio_path: str) -> TranscriptionResult:
+def get_lyrics(media_info: Optional[MediaInfo], audio_path: str) -> Optional[list[LyricLine]]:
+    """Synced lyrics from the --lyrics file or from LRCLIB (--online_lyrics)"""
+    if settings.lyrics_file:
+        lines = read_lrc_file(settings.lyrics_file)
+        if not lines:
+            print(f"{ULTRASINGER_HEAD} {red_highlighted('No synced lines found in')} {blue_highlighted(settings.lyrics_file)} - using the transcription")
+        return lines or None
+    if settings.online_lyrics and media_info is not None:
+        return fetch_synced_lyrics(media_info.artist, media_info.title, soundfile.info(audio_path).duration)
+    return None
+
+
+def transcribe_audio(cache_folder_path: str, processing_audio_path: str, media_info: Optional[MediaInfo] = None) -> TranscriptionResult:
     """Transcribe audio with AI"""
     transcription_result = None
     whisper_align_model_string = None
@@ -619,7 +637,9 @@ def transcribe_audio(cache_folder_path: str, processing_audio_path: str) -> Tran
         if not settings.whisper_align_model is None:
             whisper_align_model_string = settings.whisper_align_model.replace("/", "_")
         whisper_device = "cpu" if settings.force_whisper_cpu else settings.pytorch_device
-        transcription_config = f"{settings.transcriber}_{settings.whisper_model.value}_{whisper_device}_{whisper_align_model_string}_{settings.whisper_batch_size}_{settings.whisper_compute_type}_{settings.language}"
+        lyrics = get_lyrics(media_info, processing_audio_path)
+        lyrics_key = hashlib.md5(repr([(line.start, line.text) for line in lyrics]).encode("utf-8")).hexdigest()[:8] if lyrics else None
+        transcription_config = f"{settings.transcriber}_{settings.whisper_model.value}_{whisper_device}_{whisper_align_model_string}_{settings.whisper_batch_size}_{settings.whisper_compute_type}_{settings.language}_{lyrics_key}"
         transcription_path = os.path.join(cache_folder_path, f"{transcription_config}.json")
         cached_transcription_available = check_file_exists(transcription_path)
         if settings.skip_cache_transcription or not cached_transcription_available:
@@ -632,6 +652,7 @@ def transcribe_audio(cache_folder_path: str, processing_audio_path: str) -> Tran
                 settings.whisper_compute_type,
                 settings.language,
                 settings.keep_numbers,
+                lyrics,
             )
             with open(transcription_path, "w", encoding=FILE_ENCODING) as file:
                 file.write(transcription_result.to_json())
@@ -882,6 +903,13 @@ def init_settings(argv: list[str]) -> Settings:
             settings.quantize_to_key = arg
         elif opt in ("--ffmpeg"):
             settings.user_ffmpeg_path = arg
+        elif opt in ("--online_lyrics"):
+            settings.online_lyrics = True
+        elif opt in ("--lyrics"):
+            if not os.path.isfile(arg):
+                print(f"{ULTRASINGER_HEAD} {red_highlighted('Error: Lyrics file not found:')} {blue_highlighted(arg)}")
+                sys.exit(1)
+            settings.lyrics_file = arg
         elif opt in ("--video"):
             if not os.path.isfile(arg):
                 print(f"{ULTRASINGER_HEAD} {red_highlighted('Error: Video file not found:')} {blue_highlighted(arg)}")
@@ -929,7 +957,9 @@ def arg_options():
         "interactive",
         "cookiefile=",
         "ffmpeg=",
-        "video="
+        "video=",
+        "online_lyrics",
+        "lyrics="
     ]
     return long, short
 

@@ -64,6 +64,8 @@ def print_help() -> None:
     --cookiefile            File name where cookies should be read from and dumped to.
     
     [device]
+    --online_lyrics         Search synced lyrics on lrclib.net (sends artist and title) and align them instead of using the transcribed text
+    --lyrics                Synced lyrics file (.lrc) to align instead of using the transcribed text
     --video                 Video file that is copied to the song folder and linked with #VIDEO (audio input only)
     --force_cpu             Force all steps to be processed on CPU.
     --force_whisper_cpu     Force whisper transcription to be processed on CPU.

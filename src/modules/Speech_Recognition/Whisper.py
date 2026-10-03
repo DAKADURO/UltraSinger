@@ -3,6 +3,7 @@ import gc
 import os
 import inspect
 import textwrap
+from typing import Optional
 
 # Set environment variable to handle cuDNN loading issues
 # CUDA_MODULE_LOADING=LAZY allows PyTorch to continue even if some cuDNN modules are not found
@@ -26,6 +27,7 @@ import whisperx
 from enum import Enum
 from torch.cuda import OutOfMemoryError
 
+from modules.lyrics_client import LyricLine, estimate_offset, lines_to_segments, trim_segment_ends
 from modules.Speech_Recognition.TranscriptionResult import TranscriptionResult
 from modules.console_colors import ULTRASINGER_HEAD, blue_highlighted, red_highlighted
 from modules.Speech_Recognition.TranscribedData import TranscribedData, from_whisper
@@ -108,6 +110,7 @@ def transcribe_with_whisper(
     compute_type: str = None,
     language: str = None,
     keep_numbers: bool = False,
+    lyrics: Optional[list[LyricLine]] = None,
 ) -> TranscriptionResult:
     """Transcribe with whisper"""
     # Info: Regardless of the audio sampling rate used in the original audio file, whisper resample the audio signal to 16kHz (via ffmpeg). So the standard input from (44.1 or 48 kHz) should work.
@@ -162,6 +165,14 @@ def transcribe_with_whisper(
         if language is None:
             language = detected_language
 
+        if lyrics:
+            # Align the given lyrics instead of the transcribed text. The transcription is only used to
+            # find out how far the timestamps of the lyrics are away from this audio.
+            audio_duration = len(audio) / 16000  # whisperx loads audio with 16 kHz
+            offset = estimate_offset(result["segments"], lyrics)
+            print(f"{ULTRASINGER_HEAD} Aligning {blue_highlighted(str(len(lyrics)))} lyric lines (time shift {offset:+.1f}s)")
+            result["segments"] = lines_to_segments(lyrics, offset, audio_duration)
+
         # load alignment model and metadata
         try:
             model_a, metadata = whisperx.load_align_model(
@@ -190,6 +201,9 @@ def transcribe_with_whisper(
             device,
             return_char_alignments=False,
         )
+
+        if lyrics:
+            trim_segment_ends(result_aligned["segments"], audio)
 
         transcribed_data = convert_to_transcribed_data(result_aligned)
 

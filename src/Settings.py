@@ -47,6 +47,8 @@ class Settings:
     whisper_batch_size = None   # None = chosen from the GPU memory; reduce if low on GPU mem
     whisper_compute_type = None   # None = chosen from the GPU memory; "int8" if low on GPU mem (may reduce accuracy)
     keep_numbers = False
+    online_lyrics = False   # Search synced lyrics on lrclib.net and align them instead of using the transcribed text
+    lyrics_file = None   # Synced lyrics (.lrc file) to align instead of using the transcribed text
 
     # Device
     pytorch_device = 'cpu'  # cpu|cuda
