@@ -319,3 +319,14 @@ python UltraSingerBatch.py "path/to/songs" -o "path/to/output" --copy_to "path/t
 
 All options that `UltraSingerBatch.py` does not know (like `--language`) are passed on to `UltraSinger.py`.
 Use `--recursive` to include sub folders and `--force` to process finished songs again. Logs are written to `<output>/batch_logs`.
+When a song is processed again, its previous song folder is replaced (also in the `--copy_to` folder).
+
+If a video with the same name is next to the audio file (e.g. `song.mp3` and `song.mp4`) it is added to the song and linked with `#VIDEO`.
+
+## Add a video to a song
+
+For a single audio file use `--video`. The video is copied to the song folder and linked with `#VIDEO`:
+
+```commandline
+-i "input/music.mp3" --video "input/clip.mp4"
+```

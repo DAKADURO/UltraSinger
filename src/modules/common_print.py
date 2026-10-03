@@ -64,6 +64,7 @@ def print_help() -> None:
     --cookiefile            File name where cookies should be read from and dumped to.
     
     [device]
+    --video                 Video file that is copied to the song folder and linked with #VIDEO (audio input only)
     --force_cpu             Force all steps to be processed on CPU.
     --force_whisper_cpu     Force whisper transcription to be processed on CPU.
     --force_crepe_cpu       Force crepe pitch detection to be processed on CPU.

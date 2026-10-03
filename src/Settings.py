@@ -31,7 +31,8 @@ class Settings:
     # Process data Paths
     input_file_path = ""
     output_folder_path = ""
-    
+    video_path = None  # Video file that is copied next to an audio input and linked with #VIDEO
+
     language = None
     format_version = FormatVersion.V1_2_0
 

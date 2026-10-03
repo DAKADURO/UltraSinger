@@ -694,6 +694,11 @@ def infos_from_audio_video_input_file() -> tuple[str, str, str, MediaInfo]:
         )
         ultrastar_audio_input_path = os.path.join(song_folder_output_path, basename_with_ext)
 
+        if settings.video_path:
+            video_ext = os.path.splitext(settings.video_path)[1].lstrip('.')
+            print(f"{ULTRASINGER_HEAD} Adding video {blue_highlighted(settings.video_path)}")
+            os_helper.copy(settings.video_path, os.path.join(song_folder_output_path, f"{basename_without_ext}.{video_ext}"))
+
     # Todo: Read ID3 tags
     if song_info.cover_image_data is not None:
         save_image(song_info.cover_image_data, basename_without_ext, song_folder_output_path)
@@ -877,6 +882,11 @@ def init_settings(argv: list[str]) -> Settings:
             settings.quantize_to_key = arg
         elif opt in ("--ffmpeg"):
             settings.user_ffmpeg_path = arg
+        elif opt in ("--video"):
+            if not os.path.isfile(arg):
+                print(f"{ULTRASINGER_HEAD} {red_highlighted('Error: Video file not found:')} {blue_highlighted(arg)}")
+                sys.exit(1)
+            settings.video_path = arg
     if settings.output_folder_path == "":
         if settings.input_file_path.startswith("https:"):
             dirname = os.getcwd()
@@ -918,7 +928,8 @@ def arg_options():
         "quantize_to_key",
         "interactive",
         "cookiefile=",
-        "ffmpeg="
+        "ffmpeg=",
+        "video="
     ]
     return long, short
 

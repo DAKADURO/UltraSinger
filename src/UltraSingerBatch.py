@@ -12,11 +12,13 @@ and skipped on the next run (use --force to process them again).
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 
 AUDIO_EXTENSIONS = {".mp3", ".wav", ".flac", ".ogg", ".m4a", ".opus", ".aac"}
+VIDEO_EXTENSIONS = (".mp4", ".mkv", ".webm", ".avi", ".mov")
 STATE_FILE_NAME = ".batch_done.json"
 LOG_FOLDER_NAME = "batch_logs"
 ULTRASINGER_SCRIPT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "UltraSinger.py")
@@ -45,6 +47,44 @@ def load_state(state_path: str) -> dict:
 def save_state(state_path: str, state: dict) -> None:
     with open(state_path, "w", encoding="utf-8") as file:
         json.dump(state, file, indent=2, ensure_ascii=False)
+
+
+def entry_mtime(entry):
+    """State entries are {"mtime": ..., "folders": [...]}; older versions stored only the mtime"""
+    return entry.get("mtime") if isinstance(entry, dict) else entry
+
+
+def entry_folders(entry) -> list[str]:
+    return entry.get("folders", []) if isinstance(entry, dict) else []
+
+
+def find_video_next_to(audio_path: str) -> str | None:
+    """A video with the same name next to the audio file, e.g. song.mp3 + song.mp4"""
+    stem = os.path.splitext(audio_path)[0]
+    for extension in VIDEO_EXTENSIONS:
+        if os.path.isfile(stem + extension):
+            return stem + extension
+    return None
+
+
+def remove_song_folders(folders: list[str], *parent_dirs: str) -> None:
+    for parent in parent_dirs:
+        if not parent:
+            continue
+        for folder in folders:
+            shutil.rmtree(os.path.join(parent, folder), ignore_errors=True)
+
+
+def restore_names(output_dir: str, new_folders: set[str], replaced: list[str]) -> set[str]:
+    """UltraSinger names a second run 'Song (1)'. When it replaces 'Song', give it the old name back."""
+    result = set()
+    for folder in new_folders:
+        match = re.match(r"^(.*) \(\d+\)$", folder)
+        if match and match.group(1) in replaced and not os.path.exists(os.path.join(output_dir, match.group(1))):
+            os.rename(os.path.join(output_dir, folder), os.path.join(output_dir, match.group(1)))
+            folder = match.group(1)
+        result.add(folder)
+    return result
 
 
 def list_song_folders(output_dir: str) -> set[str]:
@@ -108,7 +148,8 @@ def main() -> int:
         mtime = os.path.getmtime(audio_path)
         prefix = f"[{index}/{len(audio_files)}] {name}"
 
-        if not args.force and state.get(key) == mtime:
+        previous = state.get(key)
+        if not args.force and previous is not None and entry_mtime(previous) == mtime:
             print(f"{prefix}: already done, skipping")
             skipped.append(name)
             continue
@@ -116,13 +157,21 @@ def main() -> int:
         print(f"{prefix}: processing ...", flush=True)
         before = list_song_folders(output_dir)
         log_path = os.path.join(log_dir, os.path.splitext(name)[0] + ".log")
-        if process_song(os.path.abspath(audio_path), output_dir, extra_args, log_path):
-            state[key] = mtime
+        song_args = list(extra_args)
+        video_path = None if "--video" in extra_args else find_video_next_to(audio_path)
+        if video_path:
+            print(f"    using video {os.path.basename(video_path)}")
+            song_args += ["--video", os.path.abspath(video_path)]
+        if process_song(os.path.abspath(audio_path), output_dir, song_args, log_path):
+            replaced = entry_folders(previous)
+            remove_song_folders(replaced, output_dir, args.copy_to)
+            new_folders = restore_names(output_dir, list_song_folders(output_dir) - before, replaced)
+            state[key] = {"mtime": mtime, "folders": sorted(new_folders)}
             save_state(state_path, state)
             done.append(name)
             print("    done")
             if args.copy_to:
-                copy_songs(output_dir, list_song_folders(output_dir) - before, args.copy_to)
+                copy_songs(output_dir, new_folders, args.copy_to)
         else:
             failed.append((name, last_error_line(log_path)))
             print(f"    FAILED, see {log_path}")
