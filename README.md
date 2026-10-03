@@ -309,6 +309,13 @@ You can also force CPU usage with the extra option `--force_cpu`.
 
 See [container/README.md](container/README.md)
 
+## Window for batch processing
+
+`run_gui_on_windows.bat` opens a small window to process a folder of songs without typing commands. You choose the
+folder with the songs, the output folder, optionally the song folder of your game, the language and the options of the
+batch below. The window shows the state of every song and a log, and remembers your settings
+(`~/.ultrasinger_gui.json`). It uses `UltraSingerBatch.py` and needs nothing but Python's `tkinter`.
+
 ## Batch processing
 
 Process every audio file of a folder, skip songs that were already done and optionally copy the results to your game's song folder:
