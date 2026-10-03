@@ -120,7 +120,11 @@ def parse_batch_line(line: str):
 
 
 def python_for_batch() -> str:
-    """The console python next to the one running the window (pythonw has no console to print to)"""
+    """Python that runs the batch: the one of the project's virtual environment (it has the packages of UltraSinger,
+    the window itself only needs tkinter), else the console python next to the one running the window"""
+    project_python = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".venv", "Scripts", "python.exe")
+    if os.path.isfile(project_python):
+        return project_python
     executable = sys.executable
     if os.path.basename(executable).lower() == "pythonw.exe":
         return os.path.join(os.path.dirname(executable), "python.exe")
