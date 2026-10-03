@@ -67,7 +67,7 @@ from modules.Ultrastar.coverter.ultrastar_txt_converter import from_ultrastar_tx
     create_ultrastar_txt_from_midi_segments, create_ultrastar_txt_from_automation
 from modules.Ultrastar.ultrastar_parser import parse_ultrastar_txt
 from modules.common_print import print_support, print_help, print_version
-from modules.os_helper import check_file_exists, get_unused_song_output_dir
+from modules.os_helper import check_file_exists, get_unused_song_output_dir, sanitize_filename
 from modules.audio_tags import read_audio_tags
 from modules.lyrics_client import LyricLine, fetch_synced_lyrics, read_lrc_file
 from modules.plot import create_plots
@@ -685,7 +685,7 @@ def infos_from_audio_video_input_file() -> tuple[str, str, str, MediaInfo]:
     if tags.year:
         # The year stored in the file describes this release; MusicBrainz may return another edition
         song_info.year = tags.year
-    basename_without_ext = f"{song_info.artist} - {song_info.title}"
+    basename_without_ext = sanitize_filename(f"{song_info.artist} - {song_info.title}")
 
     song_folder_output_path = os.path.join(settings.output_folder_path, basename_without_ext)
     song_folder_output_path = get_unused_song_output_dir(song_folder_output_path)
