@@ -23,6 +23,8 @@ MAX_DURATION_DIFFERENCE = 10.0
 MATCH_WINDOW = 15.0
 MIN_MATCH_RATIO = 0.6
 MAX_LINES_PER_SEGMENT = 4
+MIN_OFFSET_TO_TRY = 0.5  # smaller estimated shifts are not worth an extra alignment
+MIN_SCORE_GAIN = 0.02  # a shifted alignment must be clearly better than the unshifted one
 # Voice detection used to find where the last word of a line ends
 VOICE_FRAME_SECONDS = 0.02
 VOICE_THRESHOLD = 0.05  # fraction of the loud (95th percentile) level of the audio
@@ -132,6 +134,22 @@ def estimate_offset(segments: list[dict], lines: list[LyricLine]) -> float:
         if best_start is not None and best_ratio >= MIN_MATCH_RATIO:
             differences.append(segment["start"] - best_start)
     return statistics.median(differences) if differences else 0.0
+
+
+def candidate_offsets(estimated: float) -> list[float]:
+    """Time shifts to try: none (lyrics usually match the audio) and the estimated one"""
+    return [0.0] if abs(estimated) < MIN_OFFSET_TO_TRY else [0.0, estimated]
+
+
+def alignment_score(result_aligned: dict) -> float:
+    """Mean confidence of the aligned words. Words in the wrong place of the audio get a low confidence."""
+    scores = [
+        word["score"]
+        for segment in result_aligned.get("segments", [])
+        for word in segment.get("words", [])
+        if "score" in word
+    ]
+    return sum(scores) / len(scores) if scores else 0.0
 
 
 def trim_segment_ends(segments: list[dict], audio, sample_rate: int = 16000) -> None:

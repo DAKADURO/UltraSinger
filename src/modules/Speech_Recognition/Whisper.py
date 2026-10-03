@@ -1,4 +1,5 @@
 """Whisper Speech Recognition Module"""
+import copy
 import gc
 import os
 import inspect
@@ -27,7 +28,15 @@ import whisperx
 from enum import Enum
 from torch.cuda import OutOfMemoryError
 
-from modules.lyrics_client import LyricLine, estimate_offset, lines_to_segments, trim_segment_ends
+from modules.lyrics_client import (
+    MIN_SCORE_GAIN,
+    LyricLine,
+    alignment_score,
+    candidate_offsets,
+    estimate_offset,
+    lines_to_segments,
+    trim_segment_ends,
+)
 from modules.Speech_Recognition.TranscriptionResult import TranscriptionResult
 from modules.console_colors import ULTRASINGER_HEAD, blue_highlighted, red_highlighted
 from modules.Speech_Recognition.TranscribedData import TranscribedData, from_whisper
@@ -165,14 +174,6 @@ def transcribe_with_whisper(
         if language is None:
             language = detected_language
 
-        if lyrics:
-            # Align the given lyrics instead of the transcribed text. The transcription is only used to
-            # find out how far the timestamps of the lyrics are away from this audio.
-            audio_duration = len(audio) / 16000  # whisperx loads audio with 16 kHz
-            offset = estimate_offset(result["segments"], lyrics)
-            print(f"{ULTRASINGER_HEAD} Aligning {blue_highlighted(str(len(lyrics)))} lyric lines (time shift {offset:+.1f}s)")
-            result["segments"] = lines_to_segments(lyrics, offset, audio_duration)
-
         # load alignment model and metadata
         try:
             model_a, metadata = whisperx.load_align_model(
@@ -187,23 +188,39 @@ def transcribe_with_whisper(
             )
             raise ve
 
-        #Addition for numbers to words (Using previous code from louispan in PR#135)
-        if keep_numbers == False: 
-            for obj in result["segments"]:
-                obj["text"] = number_to_words(obj["text"],language)
-
-        # align whisper output
-        result_aligned = whisperx.align(
-            result["segments"],
-            model_a,
-            metadata,
-            audio,
-            device,
-            return_char_alignments=False,
-        )
+        def align_segments(segments):
+            segments = copy.deepcopy(segments)
+            #Addition for numbers to words (Using previous code from louispan in PR#135)
+            if keep_numbers == False:
+                for obj in segments:
+                    obj["text"] = number_to_words(obj["text"], language)
+            return whisperx.align(
+                segments,
+                model_a,
+                metadata,
+                audio,
+                device,
+                return_char_alignments=False,
+            )
 
         if lyrics:
+            # Align the given lyrics instead of the transcribed text. The lyrics may be shifted against this
+            # audio, so the shift estimated from the transcription is tried next to no shift at all and the
+            # one that fits the audio better is used.
+            audio_duration = len(audio) / 16000  # whisperx loads audio with 16 kHz
+            print(f"{ULTRASINGER_HEAD} Aligning {blue_highlighted(str(len(lyrics)))} lyric lines")
+            best_score, best_offset, result_aligned = None, 0.0, None
+            for offset in candidate_offsets(estimate_offset(result["segments"], lyrics)):
+                aligned = align_segments(lines_to_segments(lyrics, offset, audio_duration))
+                score = alignment_score(aligned)
+                print(f"{ULTRASINGER_HEAD} Time shift {offset:+.1f}s: alignment score {score:.3f}")
+                if best_score is None or score > best_score + MIN_SCORE_GAIN:
+                    best_score, best_offset, result_aligned = score, offset, aligned
+            print(f"{ULTRASINGER_HEAD} Using time shift {blue_highlighted(f'{best_offset:+.1f}s')}")
             trim_segment_ends(result_aligned["segments"], audio)
+        else:
+            # align whisper output
+            result_aligned = align_segments(result["segments"])
 
         transcribed_data = convert_to_transcribed_data(result_aligned)
 

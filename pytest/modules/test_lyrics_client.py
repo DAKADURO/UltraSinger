@@ -6,6 +6,8 @@ import numpy as np
 
 from src.modules.lyrics_client import (
     LyricLine,
+    alignment_score,
+    candidate_offsets,
     estimate_offset,
     lines_to_segments,
     parse_lrc,
@@ -85,6 +87,28 @@ class EstimateOffsetTest(unittest.TestCase):
 
     def test_no_match_gives_no_shift(self):
         self.assertEqual(estimate_offset([{"text": "nada que ver", "start": 10.0}], self.LINES), 0.0)
+
+
+class CandidateOffsetsTest(unittest.TestCase):
+    def test_small_shift_is_not_tried(self):
+        self.assertEqual(candidate_offsets(0.2), [0.0])
+        self.assertEqual(candidate_offsets(-0.4), [0.0])
+
+    def test_big_shift_is_tried_after_no_shift(self):
+        self.assertEqual(candidate_offsets(-4.2), [0.0, -4.2])
+
+
+class AlignmentScoreTest(unittest.TestCase):
+    def test_mean_of_word_scores_ignoring_words_without_score(self):
+        aligned = {"segments": [
+            {"words": [{"word": "a", "score": 0.9}, {"word": "1"}]},
+            {"words": [{"word": "b", "score": 0.5}]},
+        ]}
+
+        self.assertAlmostEqual(alignment_score(aligned), 0.7)
+
+    def test_no_words(self):
+        self.assertEqual(alignment_score({"segments": []}), 0.0)
 
 
 class TrimSegmentEndsTest(unittest.TestCase):
