@@ -9,6 +9,7 @@ from src.UltraSingerBatch import (
     entry_mtime,
     find_audio_files,
     find_video_next_to,
+    interpreter_without_launcher,
     load_state,
     restore_names,
     save_state,
@@ -76,6 +77,46 @@ class VideoTest(unittest.TestCase):
             _touch(root, "other.mp4")
 
             self.assertIsNone(find_video_next_to(audio))
+
+
+class InterpreterWithoutLauncherTest(unittest.TestCase):
+    def _make_venv(self, root: str, base_exists: bool = True, home: bool = True):
+        venv_python = _touch(root, "venv", "Scripts", "python.exe")
+        if base_exists:
+            _touch(root, "base", "python.exe")
+        if home:
+            with open(os.path.join(root, "venv", "pyvenv.cfg"), "w", encoding="utf-8") as file:
+                file.write(f"home = {os.path.join(root, 'base')}\nversion_info = 3.12.13\n")
+        return venv_python
+
+    def test_base_python_is_started_with_the_venv_as_environment(self):
+        with tempfile.TemporaryDirectory() as root:
+            venv_python = self._make_venv(root)
+
+            python, env = interpreter_without_launcher(venv_python)
+
+            self.assertEqual(python, os.path.join(root, "base", "python.exe"))
+            self.assertEqual(env, {"__PYVENV_LAUNCHER__": venv_python})
+
+    def test_pythonw_gets_pythonw(self):
+        with tempfile.TemporaryDirectory() as root:
+            venv_python = _touch(root, "venv", "Scripts", "pythonw.exe")
+            _touch(root, "base", "pythonw.exe")
+            with open(os.path.join(root, "venv", "pyvenv.cfg"), "w", encoding="utf-8") as file:
+                file.write(f"home = {os.path.join(root, 'base')}\n")
+
+            python, _ = interpreter_without_launcher(venv_python)
+
+            self.assertEqual(python, os.path.join(root, "base", "pythonw.exe"))
+
+    def test_without_config_or_base_python_nothing_changes(self):
+        with tempfile.TemporaryDirectory() as root:
+            venv_python = self._make_venv(root, home=False)
+            self.assertEqual(interpreter_without_launcher(venv_python), (venv_python, {}))
+
+        with tempfile.TemporaryDirectory() as root:
+            venv_python = self._make_venv(root, base_exists=False)
+            self.assertEqual(interpreter_without_launcher(venv_python), (venv_python, {}))
 
 
 class RestoreNamesTest(unittest.TestCase):

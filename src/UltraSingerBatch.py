@@ -110,9 +110,30 @@ def last_error_line(log_path: str) -> str:
     return lines[-1] if lines else ""
 
 
+def interpreter_without_launcher(python: str) -> tuple[str, dict]:
+    """Python to start and the environment it needs.
+
+    The python.exe of a virtual environment made by uv is a launcher that starts the base python. On some
+    systems the launcher does not find it ("No Python at ..."). Then the base python is started directly and
+    told which virtual environment to use, which is what the launcher does."""
+    config = os.path.join(os.path.dirname(os.path.dirname(python)), "pyvenv.cfg")
+    try:
+        with open(config, encoding="utf-8") as file:
+            for line in file:
+                key, _, value = line.partition("=")
+                if key.strip() == "home":
+                    base = os.path.join(value.strip(), os.path.basename(python))
+                    if os.path.isfile(base):
+                        return base, {"__PYVENV_LAUNCHER__": python}
+    except OSError:
+        pass
+    return python, {}
+
+
 def process_song(audio_path: str, output_dir: str, extra_args: list[str], log_path: str) -> bool:
-    command = [sys.executable, "-W", "ignore", ULTRASINGER_SCRIPT, "-i", audio_path, "-o", output_dir, *extra_args]
-    env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
+    python, python_env = interpreter_without_launcher(sys.executable)
+    command = [python, "-W", "ignore", ULTRASINGER_SCRIPT, "-i", audio_path, "-o", output_dir, *extra_args]
+    env = {**os.environ, **python_env, "PYTHONIOENCODING": "utf-8"}
     with open(log_path, "w", encoding="utf-8") as log:
         result = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, env=env, cwd=os.path.dirname(ULTRASINGER_SCRIPT))
     return result.returncode == 0

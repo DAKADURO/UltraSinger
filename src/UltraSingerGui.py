@@ -17,6 +17,7 @@ from UltraSingerBatch import (
     STATE_FILE_NAME,
     entry_mtime,
     find_audio_files,
+    interpreter_without_launcher,
     load_state,
 )
 
@@ -323,15 +324,17 @@ class App:
         self.refresh_songs()
         self.set_running(True)
         self.stopping = False
-        self.add_log(f"> {' '.join(build_command(python_for_batch(), settings))}\n")
+        python, python_env = interpreter_without_launcher(python_for_batch())
+        command = build_command(python, settings)
+        self.add_log(f"> {' '.join(command)}\n")
         self.process = subprocess.Popen(
-            build_command(python_for_batch(), settings),
+            command,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
             encoding="utf-8",
             errors="replace",
-            env={**os.environ, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"},
+            env={**os.environ, **python_env, "PYTHONUNBUFFERED": "1", "PYTHONIOENCODING": "utf-8"},
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             cwd=os.path.dirname(ULTRASINGER_SCRIPT),
         )
