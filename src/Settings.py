@@ -43,9 +43,14 @@ class Settings:
     whisper_model = WhisperModel.LARGE_V2  # Multilingual model tiny|base|small|medium|large-v1|large-v2|large-v3
     # English-only model tiny.en|base.en|small.en|medium.en
     whisper_align_model = None   # Model for other languages from huggingface.co e.g -> "gigant/romanian-wav2vec2"
-    whisper_batch_size = 16   # reduce if low on GPU mem
-    whisper_compute_type = None   # change to "int8" if low on GPU mem (may reduce accuracy)
+    whisper_batch_size = None   # None: chosen from the available GPU memory (e.g. 6 for 8 GB), reduce if low on GPU mem
+    whisper_compute_type = None   # None: float16 / int8_float16 / int8 chosen from the available GPU memory
+    whisper_chunk_seconds = 60.0   # audio is transcribed in chunks of at most this length, cut in silences. 0 = no chunks
+    lyrics_path = None   # text file with the lyrics, used instead of the recognised text
     keep_numbers = False
+
+    # Denoise
+    denoise_noise_reduction = 35.0   # dB for ffmpeg afftdn, 0 disables the denoise. The old value was 70
 
     # Device
     pytorch_device = 'cpu'  # cpu|cuda

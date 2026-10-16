@@ -61,13 +61,13 @@ def configure_additional_options(console, settings, header):
 
         # Whisper Batch Size  
         whipser_batch_size_response = console.input(  
-            f"{header} Enter the [green]Whisper batch size[/green] (default [cyan]16[/cyan]): "  
+            f"{header} Enter the [green]Whisper batch size[/green] (default: chosen from your GPU memory): "  
         ).strip()  
-        settings.whisper_batch_size = int(whipser_batch_size_response) if whipser_batch_size_response.isdigit() else 16  
+        settings.whisper_batch_size = int(whipser_batch_size_response) if whipser_batch_size_response.isdigit() else None  
   
         # Whisper Compute Type  
         whisper_compute_choice = console.input(
-            f"{header} Enter the [green]Whisper compute type[/green] (default '[cyan]float16[/cyan]' for CUDA and '[cyan]int8[/cyan]' for CPU): "  
+            f"{header} Enter the [green]Whisper compute type[/green] (default: chosen from your GPU memory, '[cyan]int8[/cyan]' for CPU): "  
         ).strip()  
         if whisper_compute_choice:  
             settings.whisper_compute_type = whisper_compute_choice  

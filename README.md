@@ -111,12 +111,14 @@ _Not all options working now!_
 
     [transcription]
     # Default is whisper
-    --whisper               Multilingual model > tiny|base|small|medium|large-v1|large-v2|large-v3  >> ((default) is large-v2)
+    --whisper               Multilingual model > tiny|base|small|medium|large-v1|large-v2|large-v3|large-v3-turbo  >> ((default) is large-v2)
                             English-only model > tiny.en|base.en|small.en|medium.en
     --whisper_align_model   Use other languages model for Whisper provided from huggingface.co
     --language              Override the language detected by whisper, does not affect transcription but steps after transcription
-    --whisper_batch_size    Reduce if low on GPU mem >> ((default) is 16)
-    --whisper_compute_type  Change to "int8" if low on GPU mem (may reduce accuracy) >> ((default) is "float16" for cuda devices, "int8" for cpu)
+    --whisper_batch_size    Reduce if low on GPU mem >> ((default) is chosen from the GPU memory, e.g. 6 for 8 GB)
+    --whisper_compute_type  float16|int8_float16|int8 >> ((default) is chosen from the GPU memory, "int8" for cpu)
+    --whisper_chunk_seconds Whisper works on chunks of this length, cut in silences. Lowers memory use and allows resuming >> ((default) is 60, 0 = no chunks)
+    --lyrics                Text file with the lyrics. Whisper is only used to find where they are sung, the text comes from the file
     --keep_numbers          Numbers will be transcribed as numerics instead of as words
 
     [extra]
@@ -125,12 +127,14 @@ _Not all options working now!_
     --disable_karaoke       Disable creation of karaoke style txt file. Karaoke is enabled by default.
     --create_audio_chunks   Enable creation of audio chunks. Audio chunks are disabled by default.
     --keep_cache            Keep cache folder after creation. Cache folder is removed by default.
+    --cache_path            Use this folder as cache (one folder per song!). A run that crashed continues with the finished steps and whisper chunks.
     --plot                  Enable creation of plots. Plots are disabled by default.
     --quantize_to_key       Quantize notes to detected musical key. Removes pitch slides and out-of-key notes. >> ((default) is enabled)
     --format_version        0.3.0|1.0.0|1.1.0|1.2.0 >> ((default) is 1.2.0)
     --musescore_path        path to MuseScore executable
     --keep_numbers          Transcribe numbers as digits and not words
     --ffmpeg                Path to ffmpeg and ffprobe executable
+    --denoise_nr            Noise reduction in dB applied to the vocals, 0 disables it >> ((default) is 35, was 70)
 
     [yt-dlp]
     --cookiefile            File name where cookies should be read from
@@ -288,8 +292,15 @@ uv pip install --index-url https://download.pytorch.org/whl/cu121 torch torchvis
 
 #### Crashes due to low VRAM
 
-If something crashes because of low VRAM then use a smaller Whisper model.
-Whisper needs more than 8GB VRAM in the `large` model!
+UltraSinger picks Whisper's batch size and compute type from the GPU memory (e.g. `int8_float16` and batch 6 on an 8 GB card),
+loads only one model at a time and frees the VRAM between the steps. If the GPU still runs out of memory while transcribing,
+the batch size is halved automatically, then `int8_float16` and finally the CPU are used.
+
+The audio is transcribed in chunks of 60 seconds (`--whisper_chunk_seconds`) that are cut inside silences.
+Every finished chunk is saved in the cache folder. Because every run writes to a new output folder, start the run again with
+`--cache_path <folder>` (one folder per song) to continue a crashed run with the chunks that are already done.
+
+If something still crashes because of low VRAM then use a smaller Whisper model.
 
 You can also force CPU usage with the extra option `--force_cpu`.
 

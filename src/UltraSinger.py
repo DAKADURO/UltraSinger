@@ -2,6 +2,7 @@
 
 import copy
 import getopt
+import hashlib
 import os
 import sys
 import Levenshtein
@@ -50,6 +51,9 @@ from modules.Speech_Recognition.TranscriptionResult import TranscriptionResult
 from modules.Speech_Recognition.hyphenation import (
     hyphenate_each_word,
 )
+from modules.Speech_Recognition.syllable_timing import add_hyphen_to_data
+from modules.Speech_Recognition.lyrics import load_lyrics
+from modules.gpu_memory import free_gpu_memory, resolve_whisper_settings
 from modules.Speech_Recognition.Whisper import transcribe_with_whisper
 from modules.Ultrastar import (
     ultrastar_writer,
@@ -81,39 +85,6 @@ from Settings import Settings
 settings = Settings()
 
 
-def add_hyphen_to_data(
-        transcribed_data: list[TranscribedData], hyphen_words: list[list[str]]
-):
-    """Add hyphen to transcribed data return new data list"""
-    new_data = []
-
-    for i, data in enumerate(transcribed_data):
-        if not hyphen_words[i]:
-            new_data.append(data)
-        else:
-            chunk_duration = data.end - data.start
-            chunk_duration = chunk_duration / (len(hyphen_words[i]))
-
-            next_start = data.start
-            for j in enumerate(hyphen_words[i]):
-                hyphenated_word_index = j[0]
-                dup = copy.copy(data)
-                dup.start = next_start
-                next_start = data.end - chunk_duration * (
-                        len(hyphen_words[i]) - 1 - hyphenated_word_index
-                )
-                dup.end = next_start
-                dup.word = hyphen_words[i][hyphenated_word_index]
-                dup.is_hyphen = True
-                if hyphenated_word_index == len(hyphen_words[i]) - 1:
-                    dup.is_word_end = True
-                else:
-                    dup.is_word_end = False
-                new_data.append(dup)
-
-    return new_data
-
-
 # Todo: Unused
 def correct_words(recognized_words, word_list_file):
     """Docstring"""
@@ -138,6 +109,9 @@ def remove_unecessary_punctuations(transcribed_data: list[TranscribedData]) -> N
     punctuation = ".,"
     for i, data in enumerate(transcribed_data):
         data.word = data.word.translate({ord(i): None for i in punctuation})
+        # Keep the character timings in sync with the word, they are used to time the syllables
+        if data.char_timings:
+            data.char_timings = [c for c in data.char_timings if c.get("char") not in punctuation]
 
 
 def run() -> tuple[str, Score, Score]:
@@ -196,6 +170,7 @@ def run() -> tuple[str, Score, Score]:
 
     # Pitch audio
     process_data.pitched_data = pitch_audio(process_data.process_data_paths)
+    free_gpu_memory()
 
     # Allowed keys for quantization
     allowed_notes_for_key = None
@@ -579,6 +554,7 @@ def CreateProcessAudio(process_data) -> str:
         settings.demucs_model,
         settings.skip_cache_vocal_separation
     )
+    free_gpu_memory()  # demucs is done, give its VRAM back before whisper is loaded
     process_data.process_data_paths.vocals_audio_file_path = os.path.join(audio_separation_folder_path, "vocals.wav")
     process_data.process_data_paths.instrumental_audio_file_path = os.path.join(audio_separation_folder_path,
                                                                                 "no_vocals.wav")
@@ -590,9 +566,11 @@ def CreateProcessAudio(process_data) -> str:
 
     # Denoise vocal audio
     denoised_output_path = os.path.join(
-        process_data.process_data_paths.cache_folder_path, process_data.basename + "_denoised.wav"
+        process_data.process_data_paths.cache_folder_path,
+        f"{process_data.basename}_denoised_nr{settings.denoise_noise_reduction}.wav"
     )
-    denoise_vocal_audio(input_path, denoised_output_path, settings.skip_cache_denoise_vocal_audio)
+    denoise_vocal_audio(input_path, denoised_output_path, settings.skip_cache_denoise_vocal_audio,
+                        settings.denoise_noise_reduction)
 
     # Convert to mono audio
     mono_output_path = os.path.join(
@@ -618,7 +596,13 @@ def transcribe_audio(cache_folder_path: str, processing_audio_path: str) -> Tran
         if not settings.whisper_align_model is None:
             whisper_align_model_string = settings.whisper_align_model.replace("/", "_")
         whisper_device = "cpu" if settings.force_whisper_cpu else settings.pytorch_device
-        transcription_config = f"{settings.transcriber}_{settings.whisper_model.value}_{whisper_device}_{whisper_align_model_string}_{settings.whisper_batch_size}_{settings.whisper_compute_type}_{settings.language}"
+        # Fill in what the user left open with values that fit the GPU memory
+        batch_size, compute_type = resolve_whisper_settings(
+            whisper_device, settings.whisper_batch_size, settings.whisper_compute_type
+        )
+        lyrics_words = load_lyrics(settings.lyrics_path) if settings.lyrics_path else None
+        lyrics_id = hashlib.md5(" ".join(lyrics_words).encode("utf-8")).hexdigest()[:8] if lyrics_words else None
+        transcription_config = f"{settings.transcriber}_{settings.whisper_model.value}_{whisper_device}_{whisper_align_model_string}_{batch_size}_{compute_type}_{settings.language}_{lyrics_id}_{settings.whisper_chunk_seconds}"
         transcription_path = os.path.join(cache_folder_path, f"{transcription_config}.json")
         cached_transcription_available = check_file_exists(transcription_path)
         if settings.skip_cache_transcription or not cached_transcription_available:
@@ -627,10 +611,13 @@ def transcribe_audio(cache_folder_path: str, processing_audio_path: str) -> Tran
                 settings.whisper_model,
                 whisper_device,
                 settings.whisper_align_model,
-                settings.whisper_batch_size,
-                settings.whisper_compute_type,
+                batch_size,
+                compute_type,
                 settings.language,
                 settings.keep_numbers,
+                lyrics_words,
+                settings.whisper_chunk_seconds,
+                os.path.join(cache_folder_path, f"{transcription_config}_chunks"),
             )
             with open(transcription_path, "w", encoding=FILE_ENCODING) as file:
                 file.write(transcription_result.to_json())
@@ -641,6 +628,7 @@ def transcribe_audio(cache_folder_path: str, processing_audio_path: str) -> Tran
                 transcription_result = TranscriptionResult.from_json(json)
     else:
         raise NotImplementedError
+    free_gpu_memory()
     return transcription_result
 
 
@@ -793,6 +781,17 @@ def init_settings(argv: list[str]) -> Settings:
             settings.whisper_batch_size = int(arg)
         elif opt in ("--whisper_compute_type"):
             settings.whisper_compute_type = arg
+        elif opt in ("--whisper_chunk_seconds",):
+            settings.whisper_chunk_seconds = float(arg)
+        elif opt in ("--lyrics",):
+            if not os.path.isfile(arg):
+                print(f"{ULTRASINGER_HEAD} {red_highlighted('Error: Lyrics file')} {blue_highlighted(arg)} {red_highlighted('not found.')}")
+                sys.exit(1)
+            settings.lyrics_path = arg
+        elif opt in ("--cache_path",):
+            settings.cache_override_path = arg
+        elif opt in ("--denoise_nr",):
+            settings.denoise_noise_reduction = float(arg)
         elif opt in ("--keep_numbers"):
             settings.keep_numbers = True
         elif opt in ("--language"):
@@ -878,6 +877,10 @@ def arg_options():
         "whisper_align_model=",
         "whisper_batch_size=",
         "whisper_compute_type=",
+        "whisper_chunk_seconds=",
+        "lyrics=",
+        "denoise_nr=",
+        "cache_path=",
         "language=",
         "plot",
         "midi",

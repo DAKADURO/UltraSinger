@@ -35,6 +35,23 @@ def get_language_name(language: str) -> str:
     return langcodes.Language.make(language=language).display_name()
 
 
+def get_note_beats(start: float, end: float, gap: float, multiplication: int, real_bpm: float,
+                   previous_end_beat: int) -> tuple[int, int]:
+    """Start and end beat of a note.
+
+    The end is rounded on its own and the duration is derived from it, so the rounding errors of
+    start and duration cannot add up over the song. The note never starts before the previous
+    one ended and is at least one beat long.
+    """
+    start_beat = round(second_to_beat((start - gap) * multiplication, real_bpm))
+    end_beat = round(second_to_beat((end - gap) * multiplication, real_bpm))
+
+    # Fix the round issue, so the beats don’t overlap
+    start_beat = max(start_beat, previous_end_beat)
+    end_beat = max(end_beat, start_beat + 1)
+    return start_beat, end_beat
+
+
 def create_ultrastar_txt(
         midi_segments: list[MidiSegment],
         ultrastar_file_output: str,
@@ -96,16 +113,10 @@ def create_ultrastar_txt(
         separated_word_silence = []  # This is a workaround for separated words that get his ends to far away
 
         for i, midi_segment in enumerate(midi_segments):
-            start_time = (midi_segment.start - gap) * multiplication
-            end_time = (
-                               midi_segment.end - midi_segment.start
-                       ) * multiplication
-            start_beat = round(second_to_beat(start_time, real_bpm))
-            duration = round(second_to_beat(end_time, real_bpm))
-
-            # Fix the round issue, so the beats don’t overlap
-            start_beat = max(start_beat, previous_end_beat)
-            previous_end_beat = start_beat + duration
+            start_beat, end_beat = get_note_beats(midi_segment.start, midi_segment.end, gap, multiplication,
+                                                   real_bpm, previous_end_beat)
+            duration = end_beat - start_beat
+            previous_end_beat = end_beat
 
             # Calculate the silence between the words
             if i < len(midi_segments) - 1:

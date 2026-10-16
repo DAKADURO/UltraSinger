@@ -1,12 +1,14 @@
 """Reduce noise from audio"""
 
+import shutil
+
 import ffmpeg
 
 from modules.console_colors import ULTRASINGER_HEAD, blue_highlighted, green_highlighted
 from modules.os_helper import check_file_exists
 
 
-def __ffmpeg_reduce_noise(input_file_path: str, output_file: str) -> None:
+def __ffmpeg_reduce_noise(input_file_path: str, output_file: str, noise_reduction: float) -> None:
     """Reduce noise from vocal audio with ffmpeg."""
 
     # Denoise audio samples with FFT.
@@ -26,7 +28,7 @@ def __ffmpeg_reduce_noise(input_file_path: str, output_file: str) -> None:
     try:
         (
             ffmpeg.input(input_file_path)
-            .output(output_file, af="afftdn=nr=70:nf=-80:tn=1")
+            .output(output_file, af=f"afftdn=nr={noise_reduction}:nf=-80:tn=1")
             .overwrite_output()
             .run(capture_stdout=True, capture_stderr=True)
         )
@@ -36,10 +38,20 @@ def __ffmpeg_reduce_noise(input_file_path: str, output_file: str) -> None:
         raise ffmpeg_exception
 
 
-def denoise_vocal_audio(input_path: str, output_path: str, skip_cache: bool = False) -> None:
-    """Denoise vocal audio"""
+def denoise_vocal_audio(input_path: str, output_path: str, skip_cache: bool = False,
+                        noise_reduction: float = 35.0) -> None:
+    """Denoise vocal audio
+
+    The old fixed value of 70 dB is very aggressive and can remove detail of the voice that the
+    transcription and the pitch detection need, so the default is lower and it can be changed
+    (--denoise_nr). With noise_reduction 0 the audio is only copied.
+    """
     cache_available = check_file_exists(output_path)
     if skip_cache or not cache_available:
-        __ffmpeg_reduce_noise(input_path, output_path)
+        if noise_reduction <= 0:
+            print(f"{ULTRASINGER_HEAD} Denoise is disabled")
+            shutil.copyfile(input_path, output_path)
+            return
+        __ffmpeg_reduce_noise(input_path, output_path, noise_reduction)
     else:
         print(f"{ULTRASINGER_HEAD} {green_highlighted('cache')} reusing cached denoised audio")
