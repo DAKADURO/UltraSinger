@@ -34,12 +34,14 @@ def print_help() -> None:
 
     [transcription]
     # Default is whisper
-    --whisper               Multilingual model > tiny|base|small|medium|large-v1|large-v2|large-v3  >> ((default) is large-v2)
+    --whisper               Multilingual model > tiny|base|small|medium|large-v1|large-v2|large-v3|large-v3-turbo  >> ((default) is large-v2)
                             English-only model > tiny.en|base.en|small.en|medium.en
     --whisper_align_model   Use other languages model for Whisper provided from huggingface.co
     --language              Override the language detected by whisper, does not affect transcription but steps after transcription
-    --whisper_batch_size    Reduce if low on GPU mem >> ((default) is 16)
-    --whisper_compute_type  Change to "int8" if low on GPU mem (may reduce accuracy) >> ((default) is "float16" for cuda devices, "int8" for cpu)
+    --whisper_batch_size    Reduce if low on GPU mem >> ((default) is chosen from the GPU memory, e.g. 6 for 8 GB)
+    --whisper_compute_type  float16|int8_float16|int8 >> ((default) is chosen from the GPU memory, "int8" for cpu)
+    --whisper_chunk_seconds Whisper works on chunks of this length, cut in silences. Lowers memory use and allows resuming >> ((default) is 60, 0 = no chunks)
+    --lyrics                Text file with the lyrics. Whisper is only used to find where they are sung, the text comes from the file
     --keep_numbers          Numbers will be transcribed as numerics instead of as words >> True|False >> ((default) is False)
     
     [pitcher]
@@ -53,12 +55,14 @@ def print_help() -> None:
     --disable_karaoke       Disable creation of karaoke style txt file. Karaoke is enabled by default.
     --create_audio_chunks   Enable creation of audio chunks. Audio chunks are disabled by default.
     --keep_cache            Keep cache folder after creation. Cache folder is removed by default.
+    --cache_path            Use this folder as cache (one folder per song!). A run that crashed continues with the finished steps and whisper chunks.
     --plot                  Enable creation of plots. Plots are disabled by default.
     --quantize_to_key       Quantize notes to the detected musical key. This removes slides and out-of-key notes.
     --format_version        0.3.0|1.0.0|1.1.0|1.2.0 >> ((default) is 1.2.0)
     --musescore_path        path to MuseScore executable
     --keep_numbers          Transcribe numbers as digits and not words
     --ffmpeg                Path to ffmpeg and ffprobe executable
+    --denoise_nr            Noise reduction in dB applied to the vocals, 0 disables it >> ((default) is 35, was 70)
 
     [yt-dlp]
     --cookiefile            File name where cookies should be read from and dumped to.

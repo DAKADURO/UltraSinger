@@ -14,6 +14,8 @@ class TranscribedData:
     end: float = 0
     is_hyphen: bool = False
     is_word_end: bool = True
+    # Timing of every character of the word from the forced alignment, used to time syllables
+    char_timings: list[dict] | None = None
 
 
 def from_whisper(whisper_dict) -> TranscribedData:

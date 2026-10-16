@@ -17,6 +17,11 @@ Date: 2026.03.04
   - Changed installer to uv
   - Drop crepe for SwiftF0
   - upgrade to python 3.12
+  - Low VRAM: whisper batch size / compute type chosen from the GPU memory, models are unloaded between the steps, automatic fallback on out of memory
+  - Transcription in chunks cut in silences, with a cache per chunk (`--whisper_chunk_seconds`, `--cache_path`)
+  - Syllables are timed with the character alignment of whisper instead of an even split
+  - `--lyrics` uses a lyrics file instead of the recognised text
+  - Milder default denoise (`--denoise_nr`), tempo folded into 75-150 BPM, no more cumulative rounding error or zero length notes
 
 # Version: 0.0.12
 Date: 2024.12.19

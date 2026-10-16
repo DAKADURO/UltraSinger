@@ -4,7 +4,7 @@ import unittest
 
 from packaging import version
 from unittest.mock import patch, mock_open
-from src.modules.Ultrastar.ultrastar_writer import create_ultrastar_txt, deviation, format_separated_string
+from src.modules.Ultrastar.ultrastar_writer import create_ultrastar_txt, deviation, format_separated_string, get_note_beats
 from src.modules.Midi.MidiSegment import MidiSegment
 from src.modules.Ultrastar.ultrastar_txt import UltrastarTxtValue, UltrastarTxtTag
 
@@ -449,3 +449,23 @@ class TestCreateUltrastarTxt(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestGetNoteBeats(unittest.TestCase):
+    # bpm 120 and multiplication 13 -> 26 beats per second
+    def beats(self, start, end, previous_end_beat=0):
+        return get_note_beats(start, end, gap=0.0, multiplication=13, real_bpm=120, previous_end_beat=previous_end_beat)
+
+    def test_end_is_rounded_on_its_own_so_errors_do_not_add_up(self):
+        # 0.03 s = 0.78 beats and 0.1 s = 2.6 beats: rounding start and duration separately gives 1 + 3 = 4,
+        # the end of the note is at beat 3
+        self.assertEqual(self.beats(0.03, 0.13), (1, 3))
+
+    def test_note_is_at_least_one_beat_long(self):
+        start, end = self.beats(1.0, 1.001)
+        self.assertEqual(end - start, 1)
+
+    def test_note_never_starts_before_previous_note_ended(self):
+        start, end = self.beats(1.0, 1.5, previous_end_beat=40)
+        self.assertEqual(start, 40)
+        self.assertGreater(end, start)
